@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from sniffio import current_async_library
+from fastapi_utils.tasks import repeat_every
 from models.data_sensor_model import Datasensor
 from schemas.data_sensor_schemas import Data_Sensor_Entity , Datas_Sensors_Entity
 from config.db import connect
@@ -12,6 +12,9 @@ from typing import Callable
 
 sensor = APIRouter()
 Path = connect.WASTETREATMENT.data_sensor
+Path_DO = connect.WASTETREATMENT.data_sensor_DO
+Path_kWh = connect.WASTETREATMENT.data_sensor_kWh
+Path_sensor_count = connect.WASTETREATMENT.sensor_count
 
 class TimedCalls(Thread):
     """Call function again every `interval` time duration after it's first run."""
@@ -33,16 +36,17 @@ class TimedCalls(Thread):
             self.stopped.wait(next_call - time.time())
             
 def my_function():
-    sensors = [1,2,3,4,5,6,7,8,9,10]
+    # sensors = [1,2,3,4,5,6,7,8,9,10]
+    sensors = ['1','2','3','4','5','6','7','8','9','10']
     for ss in sensors:
         value = round(random.uniform(-10,10),4)
         if value < 0:
-            Path.insert_one({"timestamp": datetime.datetime.now(),"sensor":ss,"status":"bad","value": value})
+            Path.insert_one({"sensor":ss,"status":"bad","value": value,"timestamp": datetime.datetime.now()})
         else:
-            Path.insert_one({"timestamp": datetime.datetime.now(),"sensor":ss,"status":"good","value": value})
+            Path.insert_one({"sensor":ss,"status":"good","value": value,"timestamp": datetime.datetime.now()})
 
 
-@sensor.post('/post-time')
+@sensor.post('/add-data-json')
 async def post_time():
     # Start test a few secs from now.
     start_time = datetime.datetime.now() + datetime.timedelta(seconds=5)
@@ -67,13 +71,17 @@ async def post_time():
         "message":"success"
     }
 
-@sensor.post('/add-data')
-async def add_data(data_sensor: Datasensor):
-    time_now = datetime.now()
-    SENSOR = [1,2,3,4,5,6,7,8,9,10]
-    
-    Path.insert_one(dict(data_sensor))
-    return Data_Sensor_Entity(Path.find_one({"sensor":data_sensor.sensor}))
+@sensor.post('/add-sensor')
+async def add_sensor(sensor:int):
+    add_ = Path_sensor_count.insert({"sensor":sensor})
+    if add_ : 
+        return {
+            "success"
+        }
+    else :
+        {
+            "faild"
+        }
 
 @sensor.get('/timestamp')
 async def timestamp():
@@ -93,3 +101,49 @@ async def timestamp():
     # print(m)
     return datetime.now()
 
+
+@sensor.get('/find-by-id-sensor')
+async def find_by_id_sensor(id:int):
+    find_ = Path.find({"sensor":id})
+    if find_ :
+        return Datas_Sensors_Entity(find_)
+    else :
+        return{
+            "message":"sensor not found!"
+        }
+
+@sensor.post('/del-sensor')
+async def del_sensor(id:int):
+    del_ = Path.delete_many({"sensor":id})
+    if del_ :
+        return {
+            "success!"
+        }
+    else :
+        return {
+            "faild!"
+        }
+
+@sensor.on_event("startup")
+@repeat_every(seconds=60,wait_first=True)
+async def add():
+    sensors = [1,2,3,4,5,6,7,8,9,10]
+    for ss in sensors:
+        if ss >= 1 and ss <= 4:
+            ph_value = round(random.uniform(-2,16),1)
+            if ph_value < 1 or ph_value > 14:
+                Path.insert_one({"sensor":ss,"value": ph_value,"timestamp": datetime.datetime.now(),"sensor_flag":1})
+            else :
+                Path.insert_one({"sensor":ss,"value": ph_value,"timestamp": datetime.datetime.now(),"sensor_flag":0})
+        elif ss >= 5 and ss <= 7:
+            do_value = round(random.uniform(-2,10),1)
+            if do_value < 1 or do_value > 8:
+                Path_DO.insert_one({"sensor":ss,"value": do_value,"timestamp": datetime.datetime.now(),"sensor_flag":1})
+            else :
+                Path_DO.insert_one({"sensor":ss,"value": do_value,"timestamp": datetime.datetime.now(),"sensor_flag":0})
+        else :
+            kWh_value = round(random.uniform(-2,460),1)
+            if kWh_value < 1 or kWh_value > 458:
+                Path_kWh.insert_one({"sensor":ss,"value": kWh_value,"timestamp": datetime.datetime.now(),"sensor_flag":1})
+            else :
+                Path_kWh.insert_one({"sensor":ss,"value": kWh_value,"timestamp": datetime.datetime.now(),"sensor_flag":0})
